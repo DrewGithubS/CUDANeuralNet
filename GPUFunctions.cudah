@@ -1,0 +1,45 @@
+#ifndef GPUFUNCTIONS_CUDAH
+#define GPUFUNCTIONS_CUDAH
+
+#include <cstdint>
+
+void gpuMalloc(void ** ptr, size_t size);
+void gpuFree(void * ptr);
+void cpuToGpuMemcpy(void * dest, void * src, size_t size);
+void gpuToCpuMemcpy(void * dest, void * src, size_t size);
+void gpuMemset(void * ptr, int value, size_t count);
+
+void gpuFeedforward(
+	int layers,
+	uint32_t * neurons,
+	uint32_t * neuronOffsets,
+	uint32_t * weightOffsets,
+	float * neuronValues,
+	float * biases,
+	float * weights);
+
+void gpuBackpropagate(
+	int layers,
+	uint32_t * neurons,
+	uint32_t * weightCounts,
+	uint32_t * neuronOffsets,
+	uint32_t * weightOffsets,
+	float * expectedValues,
+	float * neuronValues,
+	float * weights,
+	float * deltaValues,
+	float * batchDeltaValues,
+	float * deltaWeights,
+	float * batchDeltaWeights,
+	uint32_t totalWeightCount);
+
+void gpuUpdateParameters(
+	float * deltaValues,
+	float * deltaWeights,
+	float * weights,
+	float * biases,
+	uint32_t weightCount,
+	uint32_t neuronCount,
+	float learningRate);
+
+#endif
