@@ -113,7 +113,7 @@ void NeuralNetwork::setInputs(float * data) {
 }
 
 void NeuralNetwork::getOutputs(float * outputs) {
-	gpuToCpuMemcpy(neuronValues, 
+	gpuToCpuMemcpy(outputs, 
 				   neuronValues_d,
 				   totalNeuronCount * sizeof(float));
 }
