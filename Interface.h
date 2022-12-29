@@ -12,30 +12,30 @@ struct TrainingData {
 
 class NeuralNetwork {
 public:
-	NeuralNetwork(FILE * file);
+	NeuralNetwork(FILE * file); // Tested - Passed
 	NeuralNetwork(uint32_t layers,
 				  uint32_t * neurons,
 				  float learningRate,
-				  uint32_t batchSize);
-	~NeuralNetwork();
-	void setInputs(float * data);
-	void feedforward();
-	void getOutputs(float * outputs);
+				  uint32_t batchSize); // Tested - Passed
+	~NeuralNetwork(); // Tested - Passed
+	void setInputs(float * data); // Tested - Passed
+	void feedforward(); // Tested - Passed
+	void getOutputs(float * outputs); // Tested - Passed
 
-	void setExpectedOutput(float * expectedOutput);
-	void backpropagate();
-	void updateParameters();
-	void saveNetwork(FILE * file);
+	void setExpectedOutput(float * expectedOutput); // Tested - Passed
+	void backpropagate(); // Tested - Passed
+	void updateParameters(); // Tested - Passed
+	void saveNetwork(FILE * file); // Tested - Passed
 
 	// static void * trainerFunction(void * params);
 	// static void * fileReaderFunction(void * params);
 
-	void train(FILE * inputs, FILE * outputs);
-	void train(TrainingData data);
+	void train(FILE * inputs, FILE * outputs); // UNTESTED
+	void train(TrainingData data); // UNTESTED
 
-	void randomizeNetwork();
+	void randomizeNetwork(); // Tested - Passed
 
-	void printNetwork();
+	void printNetwork(); // Tested - Passed
 
 private:
 	uint32_t layers;
@@ -66,10 +66,10 @@ private:
 	float * deltaWeights_d;
 	float * batchDeltaWeights_d;
 
-	void doAllocation();
-	void loadNetwork(FILE * file);
-	void copyFromGpu();
-	void copyToGpu();
+	void doAllocation(); // Tested - Passed
+	void loadNetwork(FILE * file); // Tested - Passed
+	void copyFromGpu(); // Tested - Passed
+	void copyToGpu(); // Tested - Passed
 };
 
 #endif
