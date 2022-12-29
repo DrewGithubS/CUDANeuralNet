@@ -30,8 +30,10 @@ public:
 	// static void * trainerFunction(void * params);
 	// static void * fileReaderFunction(void * params);
 
-	void train(FILE * inputs, FILE * outputs); // UNTESTED
-	void train(TrainingData data); // UNTESTED
+	void trainBarrage(FILE * inputs, FILE * outputs); // UNTESTED
+	void trainChunks(FILE * inputs, FILE * outputs); // UNTESTED
+	void trainBarrage(TrainingData data); // UNTESTED
+	void trainChunks(TrainingData data); // UNTESTED
 
 	void randomizeNetwork(); // Tested - Passed
 

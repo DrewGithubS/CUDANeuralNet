@@ -7,6 +7,7 @@ void gpuMalloc(void ** ptr, size_t size);
 void gpuFree(void * ptr);
 void cpuToGpuMemcpy(void * dest, void * src, size_t size);
 void gpuToCpuMemcpy(void * dest, void * src, size_t size);
+void gpuToGpuMemcpy(void * dest, void * src, size_t size);
 void gpuMemset(void * ptr, int value, size_t count);
 
 void gpuFeedforward(

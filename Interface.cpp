@@ -13,12 +13,13 @@ NeuralNetwork::NeuralNetwork(
 							uint32_t layersIn,
 							uint32_t * neuronsIn,
 							float learningRateIn,
-							uint32_t batchSize) {
+							uint32_t batchSizeIn) {
 
 	layers = layersIn;
 	neurons = (uint32_t *) malloc(layers * sizeof(uint32_t));
 	memcpy(neurons, neuronsIn, layers * sizeof(uint32_t));
 	learningRate = learningRateIn;
+	batchSize = batchSizeIn;
 
 	doAllocation();
 }
@@ -145,9 +146,12 @@ void NeuralNetwork::setInputs(float * data) {
 }
 
 void NeuralNetwork::getOutputs(float * outputs) {
-	gpuToCpuMemcpy(outputs, 
-				   neuronValues_d + neuronOffsets[layers - 1],
+	gpuToCpuMemcpy(neuronValues, 
+				   neuronValues_d,
 				   totalNeuronCount * sizeof(float));
+	memcpy(outputs,
+		&(neuronValues[neuronOffsets[layers-1]]),
+		neurons[layers - 1] * sizeof(float));
 }
 
 void NeuralNetwork::setExpectedOutput(float * expectedOutput) {
@@ -320,7 +324,7 @@ void * trainerFunction(void * params) {
 	}
 }
 
-void NeuralNetwork::train(FILE * inputs, FILE * outputs) {
+void NeuralNetwork::trainChunks(FILE * inputs, FILE * outputs) {
 	bool * dataState = (bool *) malloc(ALTERNATOR_SIZE * sizeof(bool));
 
 	pthread_mutex_t dataStateMutex[ALTERNATOR_SIZE];
@@ -379,7 +383,7 @@ void NeuralNetwork::train(FILE * inputs, FILE * outputs) {
     pthread_join(trainerThread, NULL);
 }
 
-void NeuralNetwork::train(TrainingData data) {
+void NeuralNetwork::trainChunks(TrainingData data) {
 	for(int i = 0; i < data.length; i += batchSize) {
 		if(i + batchSize < data.length) {
 			// NOTE: If the float standard changes, this code breaks...
@@ -393,6 +397,50 @@ void NeuralNetwork::train(TrainingData data) {
 				backpropagate();
 			}
 			updateParameters();
+		}
+		if(i % 100 == 0) {
+			printf("%d\n", i);
+		}
+	}
+}
+
+void NeuralNetwork::trainBarrage(TrainingData data) {
+	float * valueList;
+	float * expectedOutputList;
+	gpuMalloc((void**) &valueList,
+		data.length * neurons[0] * sizeof(float));
+	gpuMalloc((void**) &expectedOutputList,
+		data.length * neurons[layers - 1] * sizeof(float));
+
+	cpuToGpuMemcpy(valueList,
+		data.inputs,
+		data.length * neurons[0] * sizeof(float));
+
+	cpuToGpuMemcpy(expectedOutputList,
+		data.outputs,
+		data.length * neurons[layers - 1] * sizeof(float));
+
+	for(int i = 0; i < data.length; i += batchSize) {
+		if(i + batchSize < data.length) {
+			// NOTE: If the float standard changes, this code breaks...
+			gpuMemset(deltaValues_d, 0, totalNeuronCount * sizeof(float));
+			gpuMemset(deltaWeights_d, 0, totalNeuronCount * sizeof(float));
+
+			for(int j = 0; j < batchSize; j++) {
+				gpuToGpuMemcpy(neuronValues_d,
+					valueList + i * batchSize + j,
+					data.length * neurons[0] * sizeof(float));
+
+				feedforward();
+				gpuToGpuMemcpy(expectedOutput_d,
+				   expectedOutputList + + i * batchSize + j,
+				   neurons[layers - 1] * sizeof(float));
+				backpropagate();
+			}
+			updateParameters();
+		}
+		if(i % 100 == 0) {
+			printf("%d\n", i);
 		}
 	}
 }
