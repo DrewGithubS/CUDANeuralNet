@@ -25,6 +25,8 @@ NeuralNetwork::NeuralNetwork(
 
 NeuralNetwork::~NeuralNetwork() {
 	free(neurons);
+	free(deltaValues);
+	free(deltaWeights);
 	free(weightCounts);
 	free(neuronOffsets);
 	free(weightOffsets);
@@ -55,8 +57,8 @@ void NeuralNetwork::doAllocation() {
 		neuronOffsets[i] = totalNeuronCount;
 		weightOffsets[i] = totalWeightCount;
 		totalNeuronCount += neurons[i];
+		weightCounts[i] = neurons[i] * neurons[i + 1];
 		if(i < (layers - 1)) {
-			weightCounts[i] = neurons[i] * neurons[i + 1];
 			totalWeightCount += neurons[i] * neurons[i + 1];
 			offsetToOutputs += neurons[i];
 		}
@@ -64,6 +66,8 @@ void NeuralNetwork::doAllocation() {
 
 
 	 
+	deltaValues = (float *) malloc(totalNeuronCount * sizeof(float));
+	deltaWeights = (float *) malloc(totalWeightCount * sizeof(float));
 	weights = (float *) malloc(totalWeightCount * sizeof(float));
 	biases  = (float *) malloc(totalNeuronCount * sizeof(float));
 	neuronValues = (float *) malloc(totalNeuronCount * sizeof(float));
@@ -91,8 +95,37 @@ void NeuralNetwork::loadNetwork(FILE * file) {
 	fread(biases,  totalNeuronCount, sizeof(float), file);
 	fread(weights, totalWeightCount, sizeof(float), file);
 
+	copyToGpu();
+}
+
+void NeuralNetwork::randomizeNetwork() {
+	for(int i = 0; i < totalNeuronCount; i++) {
+		biases[i] = (((float) (rand()) / (float) (RAND_MAX)) * 2) - 1;
+	}
+
+	for(int i = 0; i < totalWeightCount; i++) {
+		weights[i] = (((float) (rand()) / (float) (RAND_MAX)) * 2) - 1;
+	}
+
+	copyToGpu();
+}
+
+
+void NeuralNetwork::copyToGpu() {
+	cpuToGpuMemcpy(neuronValues_d, neuronValues, 
+		totalNeuronCount * sizeof(float));
 	cpuToGpuMemcpy(biases_d,  biases,  totalNeuronCount * sizeof(float));
 	cpuToGpuMemcpy(weights_d, weights, totalWeightCount * sizeof(float));
+}
+
+void NeuralNetwork::copyFromGpu() {
+	gpuToCpuMemcpy(deltaValues, deltaValues_d, 
+		totalNeuronCount * sizeof(float));
+	gpuToCpuMemcpy(neuronValues, neuronValues_d, 
+		totalNeuronCount * sizeof(float));
+	gpuToCpuMemcpy(biases,  biases_d,  totalNeuronCount * sizeof(float));
+	gpuToCpuMemcpy(weights, weights_d, totalWeightCount * sizeof(float));
+	gpuToCpuMemcpy(deltaWeights, deltaWeights_d, totalWeightCount * sizeof(float));
 }
 
 void NeuralNetwork::saveNetwork(FILE * file) {
@@ -101,8 +134,7 @@ void NeuralNetwork::saveNetwork(FILE * file) {
 	fwrite(&batchSize, 1, sizeof(uint32_t), file);
 	fwrite(neurons, layers, sizeof(uint32_t), file);
 
-	gpuToCpuMemcpy(biases,  biases_d,  totalNeuronCount * sizeof(float));
-	gpuToCpuMemcpy(weights, weights_d, totalWeightCount * sizeof(float));
+	copyFromGpu();
 
 	fwrite(biases,  totalNeuronCount, sizeof(float), file);
 	fwrite(weights, totalWeightCount, sizeof(float), file);
@@ -114,7 +146,7 @@ void NeuralNetwork::setInputs(float * data) {
 
 void NeuralNetwork::getOutputs(float * outputs) {
 	gpuToCpuMemcpy(outputs, 
-				   neuronValues_d,
+				   neuronValues_d + neuronOffsets[layers - 1],
 				   totalNeuronCount * sizeof(float));
 }
 
@@ -288,7 +320,6 @@ void * trainerFunction(void * params) {
 	}
 }
 
-
 void NeuralNetwork::train(FILE * inputs, FILE * outputs) {
 	bool * dataState = (bool *) malloc(ALTERNATOR_SIZE * sizeof(bool));
 
@@ -362,6 +393,38 @@ void NeuralNetwork::train(TrainingData data) {
 				backpropagate();
 			}
 			updateParameters();
+		}
+	}
+}
+
+void NeuralNetwork::printNetwork() {
+	copyFromGpu();
+	for(int layer = 0; layer < layers; layer++) {
+		printf("Layer %d:\n", layer);
+		for(int neuron = 0; neuron < neurons[layer]; neuron++) {
+			printf("\tNeuron %d:\n", neuron);
+			printf("\t\tValue: %f\n", neuronValues[neuronOffsets[layer] + neuron]);
+			printf("\t\tDelta Value: %f\n", deltaValues[neuronOffsets[layer] + neuron]);
+			if(layer != 0) {
+				printf("\t\tBias: %f\n", biases[neuronOffsets[layer] + neuron]);
+			}
+			if(layer < (layers - 1)) {
+				printf("\t\tWeights:\n");
+				for(int weight = 0; weight < neurons[layer + 1]; weight ++) {
+					printf("\t\t\tWeight %d: %f\n", weight, 
+						weights[weightOffsets[layer] + weight + 
+						neurons[layer + 1] * neuron]);
+				}
+				printf("\t\tDelta Weights:\n");
+				for(int weight = 0; weight < neurons[layer + 1]; weight ++) {
+					printf("\t\t\tDelta Weight %d%d%d: %f\n",
+						layer,
+						neuron,
+						weight, 
+						deltaWeights[weightOffsets[layer] + weight + 
+						neurons[layer + 1] * neuron]);
+				}
+			}
 		}
 	}
 }

@@ -1,4 +1,6 @@
 #include <cuda_runtime.h>
+#include <cstdio>
+#include <unistd.h>
 
 #include "GPUFunctions.cudah"
 
@@ -36,9 +38,9 @@ __global__ void simpleMatrixMult(
 
 	if(index < nextNeurons) {
 		neuronValues[nextOffset + index] = biases[nextOffset + index];
-    	for(uint32_t i = 0; i < nextNeurons; i++) {
+    	for(uint32_t i = 0; i < currentNeurons; i++) {
     		neuronValues[nextOffset + index] += 
-    			neuronValues[currentOffset + index] *
+    			neuronValues[currentOffset + i] *
     			weights[weightOffset + i * nextNeurons + index];
     	}
 
@@ -46,7 +48,7 @@ __global__ void simpleMatrixMult(
     	neuronValues[nextOffset + index] = 
     		neuronValues[nextOffset + index] > 0 ? 
     			neuronValues[nextOffset + index] :
-    			-neuronValues[nextOffset + index];
+    			0;
 	}
 };
 
@@ -87,7 +89,7 @@ __global__ void setDeltaExpect(
    uint32_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
 	if(index < neuronCount) {
-		deltaValues[index] = 
+		deltaValues[neuronOffset + index] = 
 			expectedValues[index] -
 			neuronValues[neuronOffset + index];
 	}
@@ -106,6 +108,8 @@ __global__ void getValueDeltas(
    uint32_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
 	if(index < prevNeurons) {
+		if(index == 0)
+			printf("PRINTING FROM VALUE DELTA\n\n");
 		deltaValues[prevOffset + index] = 0;
 		for(int i = 0; i < currentNeurons; i++) {
 			deltaValues[prevOffset + index] += 
@@ -114,6 +118,7 @@ __global__ void getValueDeltas(
 		}
 		batchDeltaValues[prevOffset + index] += 
 			deltaValues[prevOffset + index];
+		printf("DeltaValue %d: %f\n", prevOffset + index, deltaValues[prevOffset + index]);
 	}
 };
 
@@ -131,19 +136,51 @@ __global__ void getWeightDeltas(
    uint32_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
 	if(index < prevNeurons * currentNeurons) {
-		uint32_t prevNeuron = index / prevNeurons;
-		uint32_t currNeuron = index - (prevNeuron * prevNeurons);
+		printf("WeightOffset: %d\n", weightOffset);
+		printf("CurrOffset: %d\n", currOffset);
+		printf("DeltaWeight %d: %f\n", currOffset, deltaValues[currOffset]);
+		uint32_t currNeuron = index % currentNeurons;
+		uint32_t prevNeuron = index / currentNeurons;
+		printf("CurrNeuron: %d, PrevNeuron: %d\n", currNeuron, prevNeuron);
+		printf("Weight index: %d\n", weightOffset + index);
+		printf("DeltaValue: %d\n", currOffset + currNeuron);
+		printf("NeuronValue: %d\n", prevOffset + prevNeuron);
 
-		deltaWeights[weightOffset + 
-					 prevNeuron * prevNeurons + 
-					 currNeuron] += neuronValues[prevOffset + prevNeuron] *
-									   deltaValues[currOffset * currNeuron];
+		deltaWeights[weightOffset + index] += 
+			deltaValues[currOffset + currNeuron] *
+			neuronValues[prevOffset + prevNeuron];
 
-		batchDeltaWeights[weightOffset + 
-					 prevNeuron * prevNeurons + 
-					 currNeuron] += deltaWeights[weightOffset + 
-					 							prevNeuron * prevNeurons + 
-					 							currNeuron];
+		batchDeltaWeights[weightOffset + index] =
+			deltaWeights[weightOffset + index];
+
+		// printf("Weight count: %d\n", prevNeurons * currentNeurons);
+
+		
+		// printf("Index: %d, prevNeurons: %d, currentNeurons: %d, currNeuron: %d, prevNeuron: %d\n", index, prevNeurons, currentNeurons, currNeuron, prevNeuron);
+
+		// deltaWeights[weightOffset + 
+		// 			 currNeuron * prevNeurons + 
+		// 			 prevNeuron] = neuronValues[prevOffset + prevNeuron] *
+		// 						   deltaValues[currOffset * currNeuron];
+
+		// // printf("Current offset: %d\n", currOffset);
+		// printf("DeltaValue %d: %f, NeuronValue %d: %f, deltaWeight %d: %f\n",
+		// 	currOffset + currNeuron,
+		// 	deltaValues[currOffset * currNeuron],
+		// 	prevOffset + prevNeuron,
+		// 	neuronValues[prevOffset + prevNeuron],
+		// 	weightOffset + 
+		// 			 currNeuron * prevNeurons + 
+		// 			 prevNeuron,
+		// 	deltaWeights[weightOffset + 
+		// 			 currNeuron * prevNeurons + 
+		// 			 prevNeuron]);
+
+		// batchDeltaWeights[weightOffset + 
+		// 			 prevNeuron * prevNeurons + 
+		// 			 currNeuron] += deltaWeights[weightOffset + 
+		// 			 							prevNeuron * prevNeurons + 
+		// 			 							currNeuron];
 	}
 };
 
@@ -162,6 +199,7 @@ void gpuBackpropagate(
 					float * batchDeltaWeights,
 					uint32_t totalWeightCount) {
 
+
 	int blocksPerGrid;
 	blocksPerGrid = 
 	   		(neurons[layers - 1] + threadsPerBlock - 1) / threadsPerBlock;
@@ -172,9 +210,12 @@ void gpuBackpropagate(
 		expectedValues,
 		deltaValues);
 
-	for(int i = layers-1; i > 0; i++) {
+
+	for(int i = layers - 1; i > 0; i--) {
+		printf("Layer: %d\n", i);
 	   	blocksPerGrid = 
 	   		(neurons[layers - 1] + threadsPerBlock - 1) / threadsPerBlock;
+
 
 	   	getValueDeltas <<< blocksPerGrid, threadsPerBlock >>> (
 	   		batchDeltaValues,
@@ -186,8 +227,16 @@ void gpuBackpropagate(
 	   		neurons[i],
 	   		neurons[i - 1]);
 
-   		blocksPerGrid = (weightCounts[i] +
+	   	printf("Layer %d: %d\n", i, weightCounts[i - 1]);
+   		blocksPerGrid = (weightCounts[i - 1] +
    						threadsPerBlock - 1) / threadsPerBlock;
+
+   		printf("Neurons: %d\n", neurons[i]);
+   		printf("Neurons - 1: %d\n", neurons[i-1]);
+   		printf("Weight Offset: %d\n", weightOffsets[i - 1]);
+   		printf("Neuron Offset - 1: %d\n", neuronOffsets[i - 1]);
+   		printf("Neuron Offset: %d\n\n", neuronOffsets[i]);
+
 	   	getWeightDeltas <<< blocksPerGrid, threadsPerBlock >>> (
 			deltaValues,
 			neuronValues,
@@ -199,7 +248,6 @@ void gpuBackpropagate(
 			neuronOffsets[i - 1],
 			neuronOffsets[i]);
 	}
-
 }
 
 __global__ void updateParameters(
@@ -213,11 +261,11 @@ __global__ void updateParameters(
 
    uint32_t index = blockDim.x * blockIdx.x + threadIdx.x;
 
-	if(index < weightCount) {
+	if(index < neuronCount) {
 		biases[index] += deltaValues[index] * learningRate;
 	}
 
-	if(index < neuronCount) {
+	if(index < weightCount) {
 		weights[index] += deltaWeights[index] * learningRate;
 	}
 };

@@ -33,6 +33,10 @@ public:
 	void train(FILE * inputs, FILE * outputs);
 	void train(TrainingData data);
 
+	void randomizeNetwork();
+
+	void printNetwork();
+
 private:
 	uint32_t layers;
 	float learningRate;
@@ -47,6 +51,8 @@ private:
 	uint32_t * weightCounts;
 	uint32_t * neuronOffsets;
 	uint32_t * weightOffsets;
+	float * deltaValues;
+	float * deltaWeights;
 	float * neuronValues;
 	float * weights;
 	float * biases;
@@ -62,6 +68,8 @@ private:
 
 	void doAllocation();
 	void loadNetwork(FILE * file);
+	void copyFromGpu();
+	void copyToGpu();
 };
 
 #endif

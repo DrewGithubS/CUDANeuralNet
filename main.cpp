@@ -1,8 +1,16 @@
+#include <cstdio>
+
 #include "Interface.h"
 
 int main() {
+	FILE * file = fopen("Network.net", "rb");
+
 	uint32_t neurons[] = {2, 3, 1};
-	NeuralNetwork network = NeuralNetwork(3, neurons, 0.01, 5);
+	// NeuralNetwork network = NeuralNetwork(3, neurons, 0.01, 5);
+	// network.randomizeNetwork();
+
+	NeuralNetwork network = NeuralNetwork(file);
+	// network.saveNetwork(file);
 
 	float input[2] = {1, 1};
 	float expectedOutput[1] = {0.1};
@@ -12,7 +20,9 @@ int main() {
 	network.setInputs(input);
 	network.feedforward();
 	network.getOutputs(output);
-	printf("Output: %lf\n", output[0]);
 	network.setExpectedOutput(expectedOutput);
-	// network.backpropagate();
+	network.backpropagate();
+	network.updateParameters();
+	network.printNetwork();
+	printf("Output: %lf\n", output[0]);
 }
